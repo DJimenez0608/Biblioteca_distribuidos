@@ -62,7 +62,7 @@ public class DevolucionRenovacion {
             manejarRenovacion(contenido);
 
         } else {
-            System.out.println("⚠️ Tópico desconocido: " + topico);
+            System.out.println("️ Tópico desconocido: " + topico);
         }
     }
 

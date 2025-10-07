@@ -51,7 +51,7 @@ public class GA {
 
     //  Función para manejar disponibilidad
     private String manejarDisponibilidad(String solicitud) {
-        System.out.println("GA: 🔍 Se consultó disponibilidad de libro -> " + solicitud);
+        System.out.println("GA:  Se consultó disponibilidad de libro -> " + solicitud);
         // Aquí podrías agregar lógica para consultar una base de datos o archivo
         return "SI";
     }
