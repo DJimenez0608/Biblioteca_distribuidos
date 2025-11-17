@@ -2,26 +2,29 @@ package org.example;
 
 import org.zeromq.ZMQ;
 
-public class DevolucionRenovacion {
+public class ActorRenovacion {
 
     // Constantes de conexión
-    private static final String PUERTO_SUB_GC = "tcp://localhost:5560";
-    private static final String PUERTO_REQ_GA = "tcp://localhost:5557";
+    /**
+     * Pasa -Dactor.renov.pub=tcp://IP_DEL_GC:5560 o -Dactor.renov.ga=tcp://IP_DEL_GA:5557 si este actor vive en otra sede.
+     */
+    private static final String PUERTO_SUB_GC = System.getProperty("actor.renov.pub", "tcp://localhost:5560");
+    private static final String PUERTO_REQ_GA = System.getProperty("actor.renov.ga", "tcp://localhost:5557");
 
     private ZMQ.Context context;
     private ZMQ.Socket subscriber; // Suscriptor de GC
     private ZMQ.Socket socketGA;   // Comunicador con GA
 
     public static void main(String[] args) {
-        new DevolucionRenovacion().iniciar();
+        new ActorRenovacion().iniciar();
     }
-
 
     public void iniciar() {
         context = ZMQ.context(1);
         inicializarSockets();
 
-        System.out.println(" DevolucionRenovacion conectado a GC (" + PUERTO_SUB_GC + ") y GA (" + PUERTO_REQ_GA + ")");
+        System.out.println(" ActorRenovacion conectado a GC (" + PUERTO_SUB_GC + ") y GA (" + PUERTO_REQ_GA + ")");
+        System.out.println(" Suscrito al tópico: RENOVACION");
 
         try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
 
@@ -34,10 +37,9 @@ public class DevolucionRenovacion {
 
     //Sockets
     private void inicializarSockets() {
-        // SUB para recibir mensajes del GC
+        // SUB para recibir mensajes del GC - solo RENOVACION
         subscriber = context.socket(ZMQ.SUB);
         subscriber.connect(PUERTO_SUB_GC);
-        subscriber.subscribe("DEVOLUCION".getBytes());
         subscriber.subscribe("RENOVACION".getBytes());
 
         // REQ para enviar confirmación al GA
@@ -55,29 +57,17 @@ public class DevolucionRenovacion {
         String topico = partes[0];
         String contenido = partes.length > 1 ? partes[1] : "";
 
-        if (topico.equals("DEVOLUCION")) {
-            manejarDevolucion(contenido);
-
-        } else if (topico.equals("RENOVACION")) {
+        if ("RENOVACION".equals(topico)) {
             manejarRenovacion(contenido);
-
         } else {
-            System.out.println("️ Tópico desconocido: " + topico);
+            System.out.println(" Tópico desconocido: " + topico);
         }
-    }
-
-    // Manejo de devoluciones
-    private void manejarDevolucion(String contenido) {
-        System.out.println(" Procesando devolución -> " + contenido);
-        socketGA.send("DEVOLVER " + contenido);
-        String respGA = socketGA.recvStr();
-        System.out.println(" GA respondió: " + respGA);
     }
 
     //  Manejo de renovaciones
     private void manejarRenovacion(String contenido) {
         System.out.println(" Procesando renovación -> " + contenido);
-        socketGA.send("RENOVAR " + contenido);
+        socketGA.send(contenido.trim());
         String respGA = socketGA.recvStr();
         System.out.println(" GA respondió: " + respGA);
     }
@@ -87,6 +77,7 @@ public class DevolucionRenovacion {
         subscriber.close();
         socketGA.close();
         context.term();
-        System.out.println("\n DevolucionRenovacion finalizado correctamente.");
+        System.out.println("\n ActorRenovacion finalizado correctamente.");
     }
 }
+

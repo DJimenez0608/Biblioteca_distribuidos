@@ -9,7 +9,10 @@ import java.util.Scanner;
 public class PS {
 
     // Dirección del Gestor de Carga
-    private static final String DIRECCION_GC = "tcp://localhost:5555";
+    /**
+     * Para apuntar a un GC remoto usa -Dps.gc=tcp://<IP>:<puerto>
+     */
+    private static final String DIRECCION_GC = System.getProperty("ps.gc", "tcp://localhost:5555");
     private static final String ARCHIVO_SOLICITUDES = "PS.txt";
 
     private ZMQ.Context context;

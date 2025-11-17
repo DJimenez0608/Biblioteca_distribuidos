@@ -4,9 +4,15 @@ import org.zeromq.ZMQ;
 
 public class GC {
 
-    private static final String PUERTO_PS = "tcp://localhost:5555";  // Puerto donde recibe solicitudes de PS
-    private static final String PUERTO_PUBLICADOR = "tcp://*:5560";  // Canal de publicación
-    private static final String PUERTO_PRESTAMO = "tcp://localhost:5556"; // Comunicación con actor de préstamo
+    /**
+     * Cambia las direcciones con -Dgc.ps=..., -Dgc.pub=..., -Dgc.prestamo=...
+     * cuando debas conectar a un GA/actor remoto (por ejemplo desde otra sede).
+     */
+    private static final String PUERTO_PS = System.getProperty("gc.ps", "tcp://*:5555");
+    private static final String PUERTO_PUBLICADOR = System.getProperty("gc.pub", "tcp://*:5560");
+    private static final String PUERTO_PRESTAMO = System.getProperty("gc.prestamo", "tcp://localhost:5556");
+    private static final String SEDE = System.getProperty("sede", "SEDE1");
+    private static final String DEFAULT_USUARIO = System.getProperty("gc.usuarioId", "1");
 
     private ZMQ.Context context;
     private ZMQ.Socket socketPS;
@@ -55,53 +61,50 @@ public class GC {
             return "Solicitud vacía o nula";
         }
 
-        if (solicitud.startsWith("DEVOLVER")) {
-            return manejarDevolucion(solicitud);
+        String[] partes = solicitud.split(":");
+        String tipo = partes[0].toUpperCase();
+        String codigo = partes.length > 1 ? partes[1] : "";
+        String usuarioId = partes.length > 2 ? partes[2] : DEFAULT_USUARIO;
 
-        } else if (solicitud.startsWith("RENOVAR")) {
-            return manejarRenovacion(solicitud);
-
-        } else if (solicitud.startsWith("PRESTAMO")) {
-            return manejarPrestamo(solicitud);
-
-        } else {
-            System.out.println("️ Solicitud no reconocida: " + solicitud);
-            return "Solicitud no reconocida";
-        }
+        return switch (tipo) {
+            case "DEVOLVER" -> manejarDevolucion(codigo);
+            case "RENOVAR" -> manejarRenovacion(codigo);
+            case "PRESTAMO" -> manejarPrestamo(codigo, usuarioId);
+            default -> {
+                System.out.println("️ Solicitud no reconocida: " + solicitud);
+                yield "Solicitud no reconocida";
+            }
+        };
     }
 
 
 
     //  Devolución
-    private String manejarDevolucion(String solicitud) {
+    private String manejarDevolucion(String codigo) {
         System.out.println(" Procesando devolución...");
-        publicador.send("DEVOLUCION " + solicitud);
-        System.out.println(" Publicado en canal DEVOLUCION: " + solicitud);
-        return "Devolución aceptada, gracias.";
+        String payload = String.format("DEVOLVER %s %s", codigo, SEDE);
+        publicador.send("DEVOLUCION " + payload);
+        System.out.println(" Publicado en canal DEVOLUCION: " + payload);
+        return "Devolución aceptada y enviada al actor para actualizar la BD.";
     }
 
     //  Renovación
-    private String manejarRenovacion(String solicitud) {
+    private String manejarRenovacion(String codigo) {
         System.out.println(" Procesando renovación...");
-        String nuevaFecha = obtenerFechaRenovacion();
-        publicador.send("RENOVACION " + solicitud);
-        System.out.println(" Publicado en canal RENOVACION: " + solicitud);
-        return "Renovación aceptada, nueva fecha: " + nuevaFecha;
+        String payload = String.format("RENOVAR %s %s", codigo, SEDE);
+        publicador.send("RENOVACION " + payload);
+        System.out.println(" Publicado en canal RENOVACION: " + payload);
+        return "Renovación aceptada; la nueva fecha se confirmará cuando GA actualice la BD.";
     }
 
     //  Préstamo
-    private String manejarPrestamo(String solicitud) {
+    private String manejarPrestamo(String codigo, String usuarioId) {
         System.out.println(" Procesando préstamo...");
-        actorPrestamo.send(solicitud, 0);
+        String payload = String.format("PRESTAMO:%s:%s:%s", codigo, SEDE, usuarioId);
+        actorPrestamo.send(payload, 0);
         String respuestaPrestamo = actorPrestamo.recvStr();
         System.out.println(" Respuesta del actor de préstamo: " + respuestaPrestamo);
         return respuestaPrestamo;
-    }
-
-    // Nuevo tiempo
-    private String obtenerFechaRenovacion() {
-        java.time.LocalDate nuevaFecha = java.time.LocalDate.now().plusWeeks(1);
-        return nuevaFecha.toString();
     }
 
     //Cierre de socket

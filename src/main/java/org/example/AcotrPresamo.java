@@ -6,8 +6,11 @@ import java.util.Objects;
 public class AcotrPresamo {
 
     //  Conexion
-    private static final String PUERTO_RECIBIR = "tcp://*:5556";      // Puerto donde GC se conecta
-    private static final String PUERTO_GA = "tcp://localhost:5557";   // Puerto del Gestor de Almacenamiento (GA)
+    private static final String PUERTO_RECIBIR = System.getProperty("actor.prestamo.bind", "tcp://*:5556");      // Puerto donde GC se conecta
+    /**
+     * Si este actor corre en otra máquina, pásale -Dactor.prestamo.ga=tcp://IP_DEL_GA:5557
+     */
+    private static final String PUERTO_GA = System.getProperty("actor.prestamo.ga", "tcp://localhost:5557");
 
     private ZMQ.Context context;
     private ZMQ.Socket responder;  // Para recibir solicitudes desde GC
@@ -45,27 +48,22 @@ public class AcotrPresamo {
         String solicitud = responder.recvStr();
         System.out.println("\n Solicitud recibida del GC: " + solicitud);
 
-        // Consultar disponibilidad con GA
-        socketGA.send("Disponibilidad?");
+        String[] partes = solicitud.split(":");
+        if (partes.length < 2) {
+            responder.send("Formato inválido en solicitud de préstamo.");
+            return;
+        }
+
+        String codigo = partes[1];
+        String sede = partes.length >= 3 ? partes[2] : "SEDE1";
+        String usuarioId = partes.length >= 4 ? partes[3] : "1";
+
+        String payload = String.format("PRESTAMO %s %s %s", codigo, sede, usuarioId);
+        socketGA.send(payload);
         String respuestaGA = socketGA.recvStr();
         System.out.println(" Respuesta del GA: " + respuestaGA);
 
-        String respuestaFinal = manejarRespuestaGA(respuestaGA);
-        responder.send(respuestaFinal);
-    }
-
-    // Respuestas del GA
-    private String manejarRespuestaGA(String respuestaGA) {
-        if (Objects.equals(respuestaGA, "SI")) {
-            System.out.println(" Libro disponible. Préstamo confirmado.");
-            return "Préstamo confirmado";
-        } else if (Objects.equals(respuestaGA, "NO")) {
-            System.out.println(" Libro no disponible. Solicitud rechazada.");
-            return "Préstamo rechazado (no disponible)";
-        } else {
-            System.out.println("️ Respuesta desconocida del GA: " + respuestaGA);
-            return "Error: respuesta desconocida del GA";
-        }
+        responder.send(respuestaGA);
     }
 
     // Cierre de sockets
